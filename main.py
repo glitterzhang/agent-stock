@@ -6,6 +6,7 @@
   python main.py --scan-once        # 只扫描一次然后退出
   python main.py --list-mcp-tools   # 列出Robinhood MCP可用工具
 """
+import os
 import argparse
 import schedule
 import time
@@ -78,8 +79,9 @@ def main():
         strategy.run_scan()
         return
 
-    print("\n⏰ 启动定时扫描（每30分钟）...")
-    schedule.every(30).minutes.do(strategy.run_scan)
+    scan_interval = int(os.getenv("SCAN_INTERVAL_MINUTES", 60))
+    print(f"\n⏰ 启动定时扫描（每{scan_interval}分钟）...")
+    schedule.every(scan_interval).minutes.do(strategy.run_scan)
     schedule.every().day.at("16:05").do(strategy.risk_manager.reset_daily_pnl)
 
     strategy.run_scan()
