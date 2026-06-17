@@ -1,10 +1,14 @@
 """
 事件驱动交易机器人 — 主入口
+
+调度逻辑：
+  - 买入扫描：每天一次，美股开盘前（北京时间 21:25，即 EST 9:25）
+  - 持仓监控：每小时一次（只检查已持仓的股票）
+
 用法:
   python main.py --dry-run          # 模拟模式（默认）
-  python main.py --live             # 实盘模式（需连接MCP或配置.env）
-  python main.py --scan-once        # 只扫描一次然后退出
-  python main.py --list-mcp-tools   # 列出Robinhood MCP可用工具
+  python main.py --live             # 实盘模式
+  python main.py --scan-once        # 只跑一次后退出（调试用）
 """
 import os
 import argparse
@@ -15,50 +19,21 @@ from src.strategy import EventDrivenStrategy
 
 log = logging.getLogger(__name__)
 
+# 美股开盘前扫描时间（北京时间），夏令时21:25，冬令时22:25
+DAILY_SCAN_TIME_BJT = os.getenv("DAILY_SCAN_TIME", "21:25")
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="事件驱动股票交易机器人")
     parser.add_argument("--live", action="store_true", help="实盘模式")
     parser.add_argument("--dry-run", action="store_true", default=True, help="模拟模式（默认）")
-    parser.add_argument("--scan-once", action="store_true", help="只扫描一次后退出")
-    parser.add_argument("--list-mcp-tools", action="store_true", help="列出MCP Server工具列表")
-    parser.add_argument("--watchlist", nargs="+", help="自定义监控股票，例如: --watchlist AAPL TSLA NVDA")
+    parser.add_argument("--scan-once", action="store_true", help="只扫描一次后退出（调试）")
+    parser.add_argument("--watchlist", nargs="+", help="自定义监控股票")
     return parser.parse_args()
-
-
-def list_mcp_tools():
-    from src.robinhood_client import RobinhoodMCPClient
-    client = RobinhoodMCPClient()
-    print(f"\n🔌 连接 Robinhood MCP: {client.mcp_url}")
-    try:
-        tools = client.list_tools()
-        if not tools:
-            print("⚠️  未获取到工具列表（服务器可能需要认证）")
-            print("   请先运行: claude mcp add robinhood-trading --transport http https://agent.robinhood.com/mcp/trading")
-            return
-        print(f"\n✅ 找到 {len(tools)} 个可用工具:\n")
-        for tool in tools:
-            name = tool.get("name", "unknown")
-            desc = tool.get("description", "")
-            params = tool.get("inputSchema", {}).get("properties", {})
-            print(f"  📦 {name}")
-            if desc:
-                print(f"     {desc}")
-            if params:
-                print(f"     参数: {', '.join(params.keys())}")
-            print()
-    except Exception as e:
-        print(f"❌ 连接失败: {e}")
-        print("   请先运行: claude mcp add robinhood-trading --transport http https://agent.robinhood.com/mcp/trading")
 
 
 def main():
     args = parse_args()
-
-    if args.list_mcp_tools:
-        list_mcp_tools()
-        return
-
     dry_run = not args.live
 
     print("=" * 60)
@@ -79,12 +54,22 @@ def main():
         strategy.run_scan()
         return
 
-    scan_interval = int(os.getenv("SCAN_INTERVAL_MINUTES", 60))
-    print(f"\n⏰ 启动定时扫描（每{scan_interval}分钟）...")
-    schedule.every(scan_interval).minutes.do(strategy.run_scan)
-    schedule.every().day.at("16:05").do(strategy.risk_manager.reset_daily_pnl)
+    # ── 调度任务 ──────────────────────────────────────────
+    # 1. 每天开盘前扫描买入机会（全量49只股票）
+    schedule.every().day.at(DAILY_SCAN_TIME_BJT).do(strategy.run_scan)
+
+    # 2. 每小时监控持仓止损/止盈/趋势（只检查已持仓）
+    schedule.every(60).minutes.do(strategy.monitor_only)
+
+    # 3. 每天收盘后重置当日盈亏
+    schedule.every().day.at("04:10").do(strategy.risk_manager.reset_daily_pnl)  # 北京时间04:10 = EST 16:10
+
+    print(f"\n📅 买入扫描: 每天 {DAILY_SCAN_TIME_BJT}（北京时间，美股开盘前）")
+    print(f"👀 持仓监控: 每小时检查一次")
+    print(f"\n立即执行一次扫描...")
 
     strategy.run_scan()
+
     while True:
         schedule.run_pending()
         time.sleep(60)

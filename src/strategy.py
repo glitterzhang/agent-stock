@@ -128,6 +128,15 @@ class EventDrivenStrategy:
 
         return False, ""
 
+    def monitor_only(self):
+        """每小时只检查持仓，不做买入扫描"""
+        if not self.risk_manager.open_positions:
+            log.info("👀 持仓监控：当前无持仓，跳过")
+            return
+        log.info(f"👀 持仓监控 [{datetime.now().strftime('%H:%M')}]")
+        self._monitor_positions()
+        log.info(self.risk_manager.summary())
+
     def run_scan(self):
         log.info("=" * 60)
         log.info(f"🚀 开始扫描 [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]")
