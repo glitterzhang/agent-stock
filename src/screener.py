@@ -2,6 +2,8 @@
 股票筛选器 — 基本面 + 技术面双重过滤，寻找被低估的事件驱动候选股
 """
 import os
+import time
+import random
 import numpy as np
 import pandas as pd
 import yfinance as yf
@@ -52,12 +54,28 @@ class StockScreener:
         # 金叉：MACD从下方穿越信号线
         return bool(macd.iloc[-1] > signal.iloc[-1] and macd.iloc[-2] <= signal.iloc[-2])
 
+    def _fetch_with_retry(self, symbol: str, retries: int = 3):
+        """带重试和限速保护的数据获取"""
+        for i in range(retries):
+            try:
+                ticker = yf.Ticker(symbol)
+                hist = ticker.history(period="3mo", interval="1d")
+                info = ticker.info
+                return ticker, info, hist
+            except Exception as e:
+                if "Rate" in str(e) or "429" in str(e) or "Too Many" in str(e):
+                    wait = (2 ** i) + random.uniform(1, 3)
+                    print(f"  ⏳ {symbol} 限速，等待 {wait:.1f}秒...")
+                    time.sleep(wait)
+                else:
+                    raise
+        return None, {}, None
+
     def screen(self, symbol: str) -> Optional[StockSignal]:
-        """对单只股票进行筛选，返回信号或None"""
         try:
-            ticker = yf.Ticker(symbol)
-            info = ticker.info
-            hist = ticker.history(period="3mo", interval="1d")
+            ticker, info, hist = self._fetch_with_retry(symbol)
+            if ticker is None or hist is None:
+                return None
 
             if hist.empty or len(hist) < 20:
                 return None
@@ -137,6 +155,7 @@ class StockScreener:
         print(f"🔍 开始扫描 {len(watchlist)} 只股票...")
         signals = []
         for symbol in watchlist:
+            time.sleep(random.uniform(0.5, 1.5))  # 每只股票之间随机延迟
             sig = self.screen(symbol)
             if sig:
                 signals.append(sig)
