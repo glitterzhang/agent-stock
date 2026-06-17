@@ -45,7 +45,8 @@ def main():
     print(f"  模式: {'🟡 模拟交易' if dry_run else '🔴 实盘交易'}")
     print("=" * 60)
 
-    if not dry_run and not args.yes:
+    in_ci = os.getenv("CI") == "true"
+    if not dry_run and not args.yes and not in_ci:
         print("\n⚠️  警告: 实盘模式已启用，将真实下单！")
         confirm = input("输入 YES 确认继续: ")
         if confirm.strip() != "YES":
