@@ -6,12 +6,15 @@
 ## 快速开始
 
 ```bash
+# 第一步：在Claude Code中注册 Robinhood MCP（官方方式）
+claude mcp add robinhood-trading --transport http https://agent.robinhood.com/mcp/trading
+# 然后在Claude Code输入 /mcp，选择 robinhood-trading 并完成认证
+
 # 安装依赖
 pip install -r requirements.txt
 
-# 配置账户
+# 配置账户（robin_stocks备用模式才需要）
 cp .env.example .env
-# 编辑 .env 填入 Robinhood 账户信息
 
 # 模拟运行（不真实下单）
 python main.py --dry-run --scan-once
@@ -37,8 +40,9 @@ src/
 
 ## Robinhood MCP Server
 - URL: https://agent.robinhood.com/mcp/trading
+- 注册命令: `claude mcp add robinhood-trading --transport http https://agent.robinhood.com/mcp/trading`
 - 配置位置: .claude/settings.json
-- 协议: JSON-RPC 2.0 over HTTP/SSE
+- 协议: HTTP transport (MCP 2025-03-26)
 - 备用: robin_stocks Python库（自动降级）
 
 ## 策略逻辑

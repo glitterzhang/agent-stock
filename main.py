@@ -2,7 +2,7 @@
 事件驱动交易机器人 — 主入口
 用法:
   python main.py --dry-run          # 模拟模式（默认）
-  python main.py --live             # 实盘模式（需配置.env）
+  python main.py --live             # 实盘模式（需连接MCP或配置.env）
   python main.py --scan-once        # 只扫描一次然后退出
   python main.py --list-mcp-tools   # 列出Robinhood MCP可用工具
 """
@@ -11,23 +11,21 @@ import schedule
 import time
 import logging
 from src.strategy import EventDrivenStrategy
-from src.robinhood_client import get_client
 
 log = logging.getLogger(__name__)
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="事件驱动股票交易机器人")
-    parser.add_argument("--live", action="store_true", help="实盘模式（默认为模拟）")
+    parser.add_argument("--live", action="store_true", help="实盘模式")
     parser.add_argument("--dry-run", action="store_true", default=True, help="模拟模式（默认）")
     parser.add_argument("--scan-once", action="store_true", help="只扫描一次后退出")
     parser.add_argument("--list-mcp-tools", action="store_true", help="列出MCP Server工具列表")
-    parser.add_argument("--watchlist", nargs="+", help="自定义监控股票列表，例如: --watchlist AAPL TSLA NVDA")
+    parser.add_argument("--watchlist", nargs="+", help="自定义监控股票，例如: --watchlist AAPL TSLA NVDA")
     return parser.parse_args()
 
 
 def list_mcp_tools():
-    """连接MCP服务器并列出所有可用工具"""
     from src.robinhood_client import RobinhoodMCPClient
     client = RobinhoodMCPClient()
     print(f"\n🔌 连接 Robinhood MCP: {client.mcp_url}")
@@ -35,6 +33,7 @@ def list_mcp_tools():
         tools = client.list_tools()
         if not tools:
             print("⚠️  未获取到工具列表（服务器可能需要认证）")
+            print("   请先运行: claude mcp add robinhood-trading --transport http https://agent.robinhood.com/mcp/trading")
             return
         print(f"\n✅ 找到 {len(tools)} 个可用工具:\n")
         for tool in tools:
@@ -49,7 +48,7 @@ def list_mcp_tools():
             print()
     except Exception as e:
         print(f"❌ 连接失败: {e}")
-        print("   请确认 MCP Server URL 正确，且网络可达")
+        print("   请先运行: claude mcp add robinhood-trading --transport http https://agent.robinhood.com/mcp/trading")
 
 
 def main():
@@ -60,7 +59,6 @@ def main():
         return
 
     dry_run = not args.live
-    watchlist = args.watchlist or None
 
     print("=" * 60)
     print("  📈 事件驱动股票交易机器人")
@@ -74,23 +72,17 @@ def main():
             print("已取消")
             return
 
-    strategy = EventDrivenStrategy(watchlist=watchlist, dry_run=dry_run)
+    strategy = EventDrivenStrategy(watchlist=args.watchlist, dry_run=dry_run)
 
     if args.scan_once:
         strategy.run_scan()
         return
 
-    # 定时任务：每天交易时段内每30分钟扫描一次
-    # 美股交易时间：东部时间 9:30-16:00（UTC-5/4）
     print("\n⏰ 启动定时扫描（每30分钟）...")
     schedule.every(30).minutes.do(strategy.run_scan)
-
-    # 每天收盘后重置当日盈亏统计
     schedule.every().day.at("16:05").do(strategy.risk_manager.reset_daily_pnl)
 
-    # 立即先执行一次
     strategy.run_scan()
-
     while True:
         schedule.run_pending()
         time.sleep(60)
