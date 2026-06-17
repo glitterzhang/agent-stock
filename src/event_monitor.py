@@ -1,16 +1,19 @@
 """
-事件监控器 — 追踪财报日历、内部人买入、分析师评级变化等催化剂事件
+事件监控器 — 追踪财报日历、内部人买入等催化剂事件
+财报数据源：Finnhub 免费API（无需代理，60次/分钟）
 """
 import os
 import requests
 import pandas as pd
-import yfinance as yf
 from datetime import datetime, timedelta
 from dataclasses import dataclass
 from typing import Optional
 from dotenv import load_dotenv
 
 load_dotenv()
+
+FINNHUB_TOKEN = os.getenv("FINNHUB_API_KEY", "")
+FINNHUB_BASE = "https://finnhub.io/api/v1"
 
 
 @dataclass
@@ -33,63 +36,78 @@ class EventMonitor:
     # 财报事件
     # ─────────────────────────────────────────────
     def get_earnings_events(self, symbols: list[str]) -> list[CatalystEvent]:
-        """获取未来30天内有财报的股票"""
+        """获取未来14天内有财报的股票（Finnhub API）"""
         events = []
         today = datetime.today()
+        end_date = today + timedelta(days=14)
 
-        for symbol in symbols:
-            try:
-                ticker = yf.Ticker(symbol)
-                cal = ticker.calendar
+        if not FINNHUB_TOKEN:
+            print("  ⚠️  未设置 FINNHUB_API_KEY，跳过财报扫描（在.env中添加免费key）")
+            return events
 
-                if cal is None or cal.empty:
+        try:
+            # 批量获取财报日历
+            resp = requests.get(
+                f"{FINNHUB_BASE}/calendar/earnings",
+                params={
+                    "from": today.strftime("%Y-%m-%d"),
+                    "to": end_date.strftime("%Y-%m-%d"),
+                    "token": FINNHUB_TOKEN,
+                },
+                timeout=10,
+            )
+            if resp.status_code != 200:
+                print(f"  ⚠️  Finnhub财报API返回 {resp.status_code}")
+                return events
+
+            data = resp.json().get("earningsCalendar", [])
+            symbol_set = set(symbols)
+
+            for item in data:
+                sym = item.get("symbol", "")
+                if sym not in symbol_set:
                     continue
 
-                # yfinance返回的格式可能是DataFrame或dict，做兼容处理
-                if isinstance(cal, pd.DataFrame):
-                    earnings_dates = cal.columns.tolist()
-                    if not earnings_dates:
-                        continue
-                    earnings_date = pd.Timestamp(earnings_dates[0]).to_pydatetime()
-                else:
-                    earnings_date = cal.get("Earnings Date", [None])[0]
-                    if not earnings_date:
-                        continue
-                    earnings_date = pd.Timestamp(earnings_date).to_pydatetime()
+                date_str = item.get("date", "")
+                if not date_str:
+                    continue
 
-                days_until = (earnings_date.replace(tzinfo=None) - today).days
+                earnings_date = datetime.strptime(date_str, "%Y-%m-%d")
+                days_until = (earnings_date - today).days
 
-                if 1 <= days_until <= 14:  # 财报前1-14天进场窗口
-                    # 获取历史EPS超预期率
-                    surprise_rate = self._estimate_earnings_surprise_probability(ticker)
+                if 1 <= days_until <= 14:
+                    surprise_rate = self._estimate_surprise_finnhub(sym)
                     events.append(CatalystEvent(
-                        symbol=symbol,
+                        symbol=sym,
                         event_type="earnings",
                         event_date=earnings_date,
                         days_until_event=days_until,
-                        description=f"财报日 {earnings_date.strftime('%Y-%m-%d')}，历史超预期率 {surprise_rate:.0%}",
+                        description=f"财报日 {date_str}（{days_until}天后），历史超预期率 {surprise_rate:.0%}",
                         confidence=surprise_rate,
                         expected_move_pct=7.0,
                     ))
-            except Exception as e:
-                print(f"  获取 {symbol} 财报数据出错: {e}")
+        except Exception as e:
+            print(f"  获取财报日历出错: {e}")
 
         return events
 
-    def _estimate_earnings_surprise_probability(self, ticker) -> float:
-        """基于历史财报数据估算超预期概率"""
+    def _estimate_surprise_finnhub(self, symbol: str) -> float:
+        """用Finnhub历史EPS数据估算超预期概率"""
         try:
-            earnings = ticker.earnings_history
-            if earnings is None or earnings.empty:
+            resp = requests.get(
+                f"{FINNHUB_BASE}/stock/earnings",
+                params={"symbol": symbol, "limit": 8, "token": FINNHUB_TOKEN},
+                timeout=8,
+            )
+            if resp.status_code != 200:
                 return 0.5
-
-            recent = earnings.head(8)
-            if "surprisePercent" in recent.columns:
-                positive = (recent["surprisePercent"] > 0).sum()
-                return float(positive / len(recent))
+            data = resp.json()
+            if not data:
+                return 0.5
+            beats = sum(1 for e in data if (e.get("actual") or 0) > (e.get("estimate") or 0))
+            return beats / len(data)
         except Exception:
-            pass
-        return 0.5
+            return 0.5
 
     # ─────────────────────────────────────────────
     # 内部人买入事件（SEC Form 4）
