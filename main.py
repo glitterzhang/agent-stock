@@ -15,7 +15,10 @@ import argparse
 import schedule
 import time
 import logging
+from src.secrets import load_encrypted_credentials
 from src.strategy import EventDrivenStrategy
+
+load_encrypted_credentials()  # 优先加载加密凭证（本地模式），云端直接用环境变量
 
 log = logging.getLogger(__name__)
 
