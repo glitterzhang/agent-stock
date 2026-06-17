@@ -27,16 +27,36 @@ log = logging.getLogger(__name__)
 
 # 默认监控股票池（可按需修改）
 DEFAULT_WATCHLIST = [
-    # 科技股
-    "AAPL", "MSFT", "GOOGL", "META", "AMZN", "NVDA", "AMD", "INTC", "CRM", "SNOW",
+    # 科技 — 大盘
+    "AAPL", "MSFT", "GOOGL", "GOOG", "META", "AMZN", "NVDA", "AMD", "INTC", "CRM",
+    "SNOW", "ORCL", "IBM", "CSCO", "QCOM", "TXN", "AVGO", "MU", "AMAT", "LRCX",
+    "KLAC", "MRVL", "ADI", "NXPI", "ON", "MPWR", "ENPH", "FSLR",
+    # 软件/云
+    "NOW", "ADBE", "INTU", "PANW", "CRWD", "ZS", "DDOG", "MDB", "NET", "FTNT",
+    "OKTA", "TEAM", "WDAY", "HUBS", "GTLB", "TTD", "RBLX", "U",
     # 消费/零售
-    "COST", "TGT", "WMT", "HD", "LOW", "NKE", "SBUX",
+    "COST", "TGT", "WMT", "HD", "LOW", "NKE", "SBUX", "MCD", "YUM", "CMG",
+    "LULU", "TJX", "ROST", "DG", "DLTR", "EBAY", "ETSY", "W",
+    # 通信/媒体
+    "NFLX", "DIS", "CMCSA", "T", "VZ", "TMUS", "CHTR", "PARA", "WBD",
     # 医疗健康
-    "JNJ", "PFE", "MRNA", "ABBV", "BMY", "UNH",
+    "JNJ", "PFE", "MRNA", "ABBV", "BMY", "UNH", "CVS", "CI", "HUM", "ELV",
+    "LLY", "MRK", "AMGN", "GILD", "BIIB", "REGN", "VRTX", "ISRG", "BSX", "MDT",
+    "ABT", "TMO", "DHR", "A", "IQV", "ZBH",
     # 金融
-    "JPM", "BAC", "GS", "MS", "V", "MA",
-    # 工业/能源
-    "XOM", "CVX", "CAT", "DE", "BA",
+    "JPM", "BAC", "GS", "MS", "V", "MA", "WFC", "C", "AXP", "BLK",
+    "SCHW", "COF", "USB", "PNC", "TFC", "BK", "STT", "CB", "AIG", "MET",
+    # 工业/制造
+    "CAT", "DE", "BA", "HON", "GE", "MMM", "LMT", "RTX", "NOC", "GD",
+    "UPS", "FDX", "CSX", "UNP", "NSC",
+    # 能源
+    "XOM", "CVX", "COP", "SLB", "EOG", "PXD", "MPC", "VLO", "PSX",
+    # 原材料
+    "LIN", "APD", "NEM", "FCX", "NUE", "CF",
+    # 房地产/公用事业
+    "NEE", "DUK", "SO", "AEP", "PLD", "AMT", "EQIX", "SPG",
+    # 消费必需品
+    "PG", "KO", "PEP", "CL", "KMB", "GIS", "K", "HSY", "MKC",
 ]
 
 
