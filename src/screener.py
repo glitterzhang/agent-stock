@@ -1,5 +1,5 @@
 """
-股票筛选器 — 数据源：robin_stocks（直连Robinhood，无网络限制）
+Stock screener — data source: robin_stocks (direct Robinhood connection, no network restrictions)
 """
 import os
 import time
@@ -44,17 +44,17 @@ class StockScreener:
             password = os.getenv("ROBINHOOD_PASSWORD")
             mfa_key = os.getenv("ROBINHOOD_MFA_KEY")
             if not email or not password:
-                raise ValueError("请在 .env 文件中设置 ROBINHOOD_EMAIL 和 ROBINHOOD_PASSWORD")
+                raise ValueError("Please set ROBINHOOD_EMAIL and ROBINHOOD_PASSWORD in the .env file")
             mfa_code = pyotp.TOTP(mfa_key).now() if mfa_key else None
             r.login(email, password, mfa_code=mfa_code)
             self._logged_in = True
-            print("✅ Robinhood 登录成功，开始获取数据...")
+            print("✅ Robinhood login successful, fetching data...")
 
     def _fetch(self, symbol: str):
-        """从 Robinhood 获取股票数据"""
+        """Fetch stock data from Robinhood"""
         self._ensure_login()
 
-        # 用小时线计算RSI（更实时），日线计算成交量比率
+        # Use hourly bars for RSI (more real-time), daily bars for volume ratio
         hist_hour_raw = r.get_stock_historicals(
             symbol, interval="hour", span="month", bounds="regular"
         )
@@ -64,20 +64,20 @@ class StockScreener:
         if not hist_hour_raw or not hist_day_raw:
             return None, {}, None
 
-        # 小时线用于RSI/MACD（过去1个月，约160根K线）
+        # Hourly bars for RSI/MACD (past 1 month, ~160 candles)
         hist = pd.DataFrame(hist_hour_raw)
         hist["Close"] = hist["close_price"].astype(float)
         hist["Volume"] = hist["volume"].astype(float)
         hist["Date"] = pd.to_datetime(hist["begins_at"])
         hist = hist.set_index("Date").sort_index()
 
-        # 日线用于成交量比率（20日均量对比）
+        # Daily bars for volume ratio (today's volume vs 20-day average)
         hist_day = pd.DataFrame(hist_day_raw)
         hist_day["Volume"] = hist_day["volume"].astype(float)
         hist_day["Date"] = pd.to_datetime(hist_day["begins_at"])
         hist_day = hist_day.set_index("Date").sort_index()
 
-        # 基本面数据
+        # Fundamental data
         fundamentals = r.get_fundamentals(symbol)
         info_raw = fundamentals[0] if fundamentals else {}
 
@@ -115,10 +115,10 @@ class StockScreener:
                 return None
 
             price = float(hist["Close"].iloc[-1])
-            # RSI用小时线（实时），MACD同样用小时线
+            # RSI uses hourly bars (real-time); MACD also uses hourly bars
             rsi = self.calculate_rsi(hist["Close"])
 
-            # 成交量比率用日线（今日量 vs 20日均量）
+            # Volume ratio uses daily bars (today's volume vs 20-day average)
             avg_vol = hist_day["Volume"].rolling(20).mean().iloc[-1]
             today_vol = hist_day["Volume"].iloc[-1]
             volume_ratio = float(today_vol / avg_vol) if avg_vol > 0 else 0
@@ -133,36 +133,36 @@ class StockScreener:
             score = 0
             disqualifiers = []
 
-            # 负PE = 公司亏损，直接排除
+            # Negative PE = company is losing money, disqualify immediately
             if pe and pe < 0:
-                disqualifiers.append(f"亏损公司(PE={pe:.1f}x)")
+                disqualifiers.append(f"Loss-making company (PE={pe:.1f}x)")
 
             if disqualifiers:
-                print(f"  ❌ {symbol} 排除: {', '.join(disqualifiers)}")
+                print(f"  ❌ {symbol} disqualified: {', '.join(disqualifiers)}")
                 return None
 
             if rsi < self.rsi_threshold:
                 score += 25
-                reasons.append(f"RSI超卖 ({rsi:.1f})")
+                reasons.append(f"RSI oversold ({rsi:.1f})")
 
             if pe and 0 < pe < self.max_pe:
                 score += 20
-                reasons.append(f"低PE ({pe:.1f}x)")
+                reasons.append(f"Low PE ({pe:.1f}x)")
             if pb and pb < self.max_pb:
                 score += 15
-                reasons.append(f"低PB ({pb:.1f}x)")
+                reasons.append(f"Low PB ({pb:.1f}x)")
 
             if volume_ratio >= self.volume_multiplier:
                 score += 20
-                reasons.append(f"成交量放大 ({volume_ratio:.1f}x均量)")
+                reasons.append(f"Volume surge ({volume_ratio:.1f}x average)")
 
             if upside_pct and upside_pct > 20:
                 score += 15
-                reasons.append(f"分析师目标价上行 {upside_pct:.1f}%")
+                reasons.append(f"Analyst target upside {upside_pct:.1f}%")
 
             if self.calculate_macd_crossover(hist["Close"]):
                 score += 5
-                reasons.append("MACD金叉")
+                reasons.append("MACD golden cross")
 
             if market_cap and market_cap < self.min_market_cap:
                 return None
@@ -185,19 +185,19 @@ class StockScreener:
             )
 
         except Exception as e:
-            print(f"  筛选 {symbol} 出错: {e}")
+            print(f"  Error screening {symbol}: {e}")
             return None
 
     def scan_watchlist(self, watchlist: list[str]) -> list[StockSignal]:
-        print(f"🔍 开始扫描 {len(watchlist)} 只股票...")
+        print(f"🔍 Starting scan of {len(watchlist)} stocks...")
         self._ensure_login()
         signals = []
         for symbol in watchlist:
-            time.sleep(0.3)  # 避免请求过快
+            time.sleep(0.3)  # avoid hitting rate limits
             sig = self.screen(symbol)
             if sig:
                 signals.append(sig)
-                print(f"  ✅ {symbol}: 评分 {sig.score:.0f} — {', '.join(sig.reasons)}")
+                print(f"  ✅ {symbol}: score {sig.score:.0f} — {', '.join(sig.reasons)}")
 
         signals.sort(key=lambda s: s.score, reverse=True)
         return signals

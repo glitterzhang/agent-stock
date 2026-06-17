@@ -1,8 +1,8 @@
 """
-凭证管理 — 支持明文环境变量（云端推荐）和本地加密两种模式
+Credential management — supports plain environment variables (recommended for cloud) and local encryption
 
-云端模式（Railway）：直接在 Railway Dashboard 设置环境变量，无需加密
-本地加密模式：python -m src.secrets encrypt  生成加密文件
+Cloud mode (Railway): set environment variables directly in the Railway Dashboard, no encryption needed
+Local encryption mode: python -m src.secrets encrypt  generates an encrypted file
 """
 import os
 import base64
@@ -12,38 +12,38 @@ load_dotenv()
 
 
 def get_secret(key: str) -> str:
-    """统一获取凭证，优先从环境变量读取"""
+    """Retrieve a credential, preferring environment variables"""
     val = os.getenv(key)
     if not val:
-        raise ValueError(f"缺少必要的环境变量: {key}\n"
-                         f"  云端: 在 Railway Dashboard → Variables 中添加\n"
-                         f"  本地: 在 .env 文件中添加 {key}=xxx")
+        raise ValueError(f"Missing required environment variable: {key}\n"
+                         f"  Cloud: add it in Railway Dashboard → Variables\n"
+                         f"  Local: add {key}=xxx to the .env file")
     return val
 
 
 def encrypt_credentials():
-    """本地加密凭证，生成 .env.encrypted 文件"""
+    """Encrypt credentials locally and generate a .env.encrypted file"""
     try:
         from cryptography.fernet import Fernet
     except ImportError:
-        print("请先安装: pip install cryptography")
+        print("Please install first: pip install cryptography")
         return
 
-    # 生成或加载密钥
+    # Generate or load the encryption key
     key_file = ".secret.key"
     if os.path.exists(key_file):
         with open(key_file, "rb") as f:
             key = f.read()
-        print(f"使用已有密钥: {key_file}")
+        print(f"Using existing key: {key_file}")
     else:
         key = Fernet.generate_key()
         with open(key_file, "wb") as f:
             f.write(key)
-        print(f"✅ 新密钥已保存到 {key_file}（请妥善保管，不要上传到 Git）")
+        print(f"✅ New key saved to {key_file} (keep it safe, do not commit to Git)")
 
     fernet = Fernet(key)
 
-    # 加密敏感字段
+    # Encrypt sensitive fields
     sensitive_keys = ["ROBINHOOD_EMAIL", "ROBINHOOD_PASSWORD", "ROBINHOOD_MFA_KEY", "FINNHUB_API_KEY"]
     encrypted_lines = []
 
@@ -52,22 +52,22 @@ def encrypt_credentials():
         if val:
             encrypted = fernet.encrypt(val.encode()).decode()
             encrypted_lines.append(f"{k}={encrypted}")
-            print(f"  🔒 {k} 已加密")
+            print(f"  🔒 {k} encrypted")
 
     with open(".env.encrypted", "w") as f:
         f.write("\n".join(encrypted_lines))
 
-    print("\n✅ 加密完成，保存到 .env.encrypted")
-    print("   运行时设置环境变量: SECRET_KEY_FILE=.secret.key")
+    print("\n✅ Encryption complete, saved to .env.encrypted")
+    print("   Set the environment variable at runtime: SECRET_KEY_FILE=.secret.key")
 
 
 def load_encrypted_credentials():
-    """加载加密凭证（本地模式）"""
+    """Load encrypted credentials (local mode)"""
     key_file = os.getenv("SECRET_KEY_FILE", ".secret.key")
     enc_file = ".env.encrypted"
 
     if not os.path.exists(key_file) or not os.path.exists(enc_file):
-        return  # 没有加密文件，跳过
+        return  # no encrypted file, skip
 
     try:
         from cryptography.fernet import Fernet
@@ -84,7 +84,7 @@ def load_encrypted_credentials():
                 decrypted = fernet.decrypt(v.encode()).decode()
                 os.environ.setdefault(k, decrypted)
     except Exception as e:
-        print(f"⚠️  加载加密凭证失败: {e}")
+        print(f"⚠️  Failed to load encrypted credentials: {e}")
 
 
 if __name__ == "__main__":
@@ -92,4 +92,4 @@ if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "encrypt":
         encrypt_credentials()
     else:
-        print("用法: python -m src.secrets encrypt")
+        print("Usage: python -m src.secrets encrypt")

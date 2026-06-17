@@ -1,14 +1,14 @@
 """
-事件驱动交易机器人 — 主入口
+Event-driven trading bot — main entry point
 
-调度逻辑：
-  - 买入扫描：每天一次，美股开盘前（北京时间 21:25，即 EST 9:25）
-  - 持仓监控：每小时一次（只检查已持仓的股票）
+Scheduling logic:
+  - Buy scan: once per day, before US market open (Beijing time 21:25, i.e. EST 9:25)
+  - Position monitor: once per hour (only checks currently held stocks)
 
-用法:
-  python main.py --dry-run          # 模拟模式（默认）
-  python main.py --live             # 实盘模式
-  python main.py --scan-once        # 只跑一次后退出（调试用）
+Usage:
+  python main.py --dry-run          # paper trading mode (default)
+  python main.py --live             # live trading mode
+  python main.py --scan-once        # run once and exit (for debugging)
 """
 import os
 import argparse
@@ -18,21 +18,21 @@ import logging
 from src.secrets import load_encrypted_credentials
 from src.strategy import EventDrivenStrategy
 
-load_encrypted_credentials()  # 优先加载加密凭证（本地模式），云端直接用环境变量
+load_encrypted_credentials()  # load encrypted credentials first (local mode); cloud uses env vars directly
 
 log = logging.getLogger(__name__)
 
-# 美股开盘前扫描时间（北京时间），夏令时21:25，冬令时22:25
+# Pre-market scan time (Beijing time); 21:25 during daylight saving, 22:25 otherwise
 DAILY_SCAN_TIME_BJT = os.getenv("DAILY_SCAN_TIME", "21:25")
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="事件驱动股票交易机器人")
-    parser.add_argument("--live", action="store_true", help="实盘模式")
-    parser.add_argument("--dry-run", action="store_true", default=True, help="模拟模式（默认）")
-    parser.add_argument("--scan-once", action="store_true", help="只扫描一次后退出（调试）")
-    parser.add_argument("--yes", action="store_true", help="跳过确认提示（CI/自动化使用）")
-    parser.add_argument("--watchlist", nargs="+", help="自定义监控股票")
+    parser = argparse.ArgumentParser(description="Event-driven stock trading bot")
+    parser.add_argument("--live", action="store_true", help="live trading mode")
+    parser.add_argument("--dry-run", action="store_true", default=True, help="paper trading mode (default)")
+    parser.add_argument("--scan-once", action="store_true", help="run one scan and exit (debugging)")
+    parser.add_argument("--yes", action="store_true", help="skip confirmation prompt (for CI/automation)")
+    parser.add_argument("--watchlist", nargs="+", help="custom stock watchlist")
     return parser.parse_args()
 
 
@@ -41,16 +41,16 @@ def main():
     dry_run = not args.live
 
     print("=" * 60)
-    print("  📈 事件驱动股票交易机器人")
-    print(f"  模式: {'🟡 模拟交易' if dry_run else '🔴 实盘交易'}")
+    print("  📈 Event-Driven Stock Trading Bot")
+    print(f"  Mode: {'🟡 Paper trading' if dry_run else '🔴 Live trading'}")
     print("=" * 60)
 
     in_ci = os.getenv("CI") == "true"
     if not dry_run and not args.yes and not in_ci:
-        print("\n⚠️  警告: 实盘模式已启用，将真实下单！")
-        confirm = input("输入 YES 确认继续: ")
+        print("\n⚠️  Warning: live trading mode is enabled — real orders will be placed!")
+        confirm = input("Type YES to confirm: ")
         if confirm.strip() != "YES":
-            print("已取消")
+            print("Cancelled")
             return
 
     strategy = EventDrivenStrategy(watchlist=args.watchlist, dry_run=dry_run)
@@ -59,19 +59,19 @@ def main():
         strategy.run_scan()
         return
 
-    # ── 调度任务 ──────────────────────────────────────────
-    # 1. 每天开盘前扫描买入机会（全量49只股票）
+    # ── Scheduled tasks ───────────────────────────────────
+    # 1. Scan for buy opportunities once per day before market open (full 49-stock watchlist)
     schedule.every().day.at(DAILY_SCAN_TIME_BJT).do(strategy.run_scan)
 
-    # 2. 每小时监控持仓止损/止盈/趋势（只检查已持仓）
+    # 2. Monitor positions for stop-loss/take-profit/trend every hour (only held stocks)
     schedule.every(60).minutes.do(strategy.monitor_only)
 
-    # 3. 每天收盘后重置当日盈亏
-    schedule.every().day.at("04:10").do(strategy.risk_manager.reset_daily_pnl)  # 北京时间04:10 = EST 16:10
+    # 3. Reset daily PnL after market close each day
+    schedule.every().day.at("04:10").do(strategy.risk_manager.reset_daily_pnl)  # Beijing 04:10 = EST 16:10
 
-    print(f"\n📅 买入扫描: 每天 {DAILY_SCAN_TIME_BJT}（北京时间，美股开盘前）")
-    print(f"👀 持仓监控: 每小时检查一次")
-    print(f"\n立即执行一次扫描...")
+    print(f"\n📅 Buy scan: daily at {DAILY_SCAN_TIME_BJT} Beijing time (before US market open)")
+    print(f"👀 Position monitor: checked every hour")
+    print(f"\nRunning an immediate scan now...")
 
     strategy.run_scan()
 

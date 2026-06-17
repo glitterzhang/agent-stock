@@ -1,6 +1,6 @@
 """
-事件监控器 — 追踪财报日历、内部人买入等催化剂事件
-财报数据源：Finnhub 免费API（无需代理，60次/分钟）
+Event monitor — tracks earnings calendar, insider buying, and other catalyst events
+Earnings data source: Finnhub free API (no proxy required, 60 requests/minute)
 """
 import os
 import requests
@@ -23,8 +23,8 @@ class CatalystEvent:
     event_date: datetime
     days_until_event: int
     description: str
-    confidence: float        # 0-1，信号可信度
-    expected_move_pct: float # 预期涨幅
+    confidence: float        # 0-1, signal confidence
+    expected_move_pct: float # expected price move
 
 
 class EventMonitor:
@@ -33,20 +33,20 @@ class EventMonitor:
         self.headers = {"User-Agent": "agent-stock-bot contact@example.com"}
 
     # ─────────────────────────────────────────────
-    # 财报事件
+    # Earnings events
     # ─────────────────────────────────────────────
     def get_earnings_events(self, symbols: list[str]) -> list[CatalystEvent]:
-        """获取未来14天内有财报的股票（Finnhub API）"""
+        """Fetch stocks with earnings in the next 14 days (Finnhub API)"""
         events = []
         today = datetime.today()
         end_date = today + timedelta(days=14)
 
         if not FINNHUB_TOKEN:
-            print("  ⚠️  未设置 FINNHUB_API_KEY，跳过财报扫描（在.env中添加免费key）")
+            print("  ⚠️  FINNHUB_API_KEY not set, skipping earnings scan (add a free key in .env)")
             return events
 
         try:
-            # 批量获取财报日历
+            # Batch fetch earnings calendar
             resp = requests.get(
                 f"{FINNHUB_BASE}/calendar/earnings",
                 params={
@@ -57,7 +57,7 @@ class EventMonitor:
                 timeout=10,
             )
             if resp.status_code != 200:
-                print(f"  ⚠️  Finnhub财报API返回 {resp.status_code}")
+                print(f"  ⚠️  Finnhub earnings API returned {resp.status_code}")
                 return events
 
             data = resp.json().get("earningsCalendar", [])
@@ -82,17 +82,17 @@ class EventMonitor:
                         event_type="earnings",
                         event_date=earnings_date,
                         days_until_event=days_until,
-                        description=f"财报日 {date_str}（{days_until}天后），历史超预期率 {surprise_rate:.0%}",
+                        description=f"Earnings date {date_str} ({days_until} days away), historical beat rate {surprise_rate:.0%}",
                         confidence=surprise_rate,
                         expected_move_pct=7.0,
                     ))
         except Exception as e:
-            print(f"  获取财报日历出错: {e}")
+            print(f"  Error fetching earnings calendar: {e}")
 
         return events
 
     def _estimate_surprise_finnhub(self, symbol: str) -> float:
-        """用Finnhub历史EPS数据估算超预期概率"""
+        """Estimate beat probability using Finnhub historical EPS data"""
         try:
             resp = requests.get(
                 f"{FINNHUB_BASE}/stock/earnings",
@@ -110,17 +110,17 @@ class EventMonitor:
             return 0.5
 
     # ─────────────────────────────────────────────
-    # 内部人买入事件（SEC Form 4）
+    # Insider buying events (SEC Form 4)
     # ─────────────────────────────────────────────
     def get_insider_buying_events(self, symbols: list[str]) -> list[CatalystEvent]:
-        """通过SEC EDGAR获取近期内部人净买入记录"""
+        """Fetch recent net insider buying records via SEC EDGAR"""
         events = []
         today = datetime.today()
         cutoff = today - timedelta(days=30)
 
         for symbol in symbols:
             try:
-                # 获取公司CIK
+                # Get company CIK
                 cik = self._get_cik(symbol)
                 if not cik:
                     continue
@@ -148,18 +148,18 @@ class EventMonitor:
 
                 if net_buy_shares > 0 and latest_date:
                     days_since = (today - latest_date).days
-                    if days_since <= 7:  # 7天内有内部人净买入
+                    if days_since <= 7:  # net insider buying within the past 7 days
                         events.append(CatalystEvent(
                             symbol=symbol,
                             event_type="insider_buy",
                             event_date=latest_date,
                             days_until_event=-days_since,
-                            description=f"内部人净买入 {net_buy_shares:,} 股（{days_since}天前）",
+                            description=f"Net insider purchase of {net_buy_shares:,} shares ({days_since} days ago)",
                             confidence=0.72,
                             expected_move_pct=8.0,
                         ))
             except Exception as e:
-                print(f"  获取 {symbol} 内部人数据出错: {e}")
+                print(f"  Error fetching insider data for {symbol}: {e}")
 
         return events
 
@@ -169,7 +169,7 @@ class EventMonitor:
                 "https://efts.sec.gov/LATEST/search-index?q=%22" + symbol + "%22&dateRange=custom&startdt=2020-01-01&forms=4",
                 headers=self.headers, timeout=10
             )
-            # 简化：直接用ticker->CIK映射端点
+            # Simplified: use the ticker->CIK mapping endpoint directly
             resp2 = requests.get(
                 f"https://data.sec.gov/submissions/CIK{symbol.upper()}.json",
                 headers=self.headers, timeout=10
@@ -181,7 +181,7 @@ class EventMonitor:
         return None
 
     def _fetch_form4(self, cik: str) -> list:
-        """从SEC EDGAR获取Form 4内部人交易申报"""
+        """Fetch Form 4 insider trading filings from SEC EDGAR"""
         try:
             url = f"https://data.sec.gov/submissions/CIK{str(cik).zfill(10)}.json"
             resp = requests.get(url, headers=self.headers, timeout=15)
@@ -203,14 +203,14 @@ class EventMonitor:
             return []
 
     # ─────────────────────────────────────────────
-    # 综合扫描
+    # Combined scan
     # ─────────────────────────────────────────────
     def scan_events(self, symbols: list[str]) -> list[CatalystEvent]:
-        """扫描所有事件类型，返回按置信度排序的事件列表"""
+        """Scan all event types and return a list sorted by confidence"""
         all_events = []
-        print("📅 扫描财报日历...")
+        print("📅 Scanning earnings calendar...")
         all_events.extend(self.get_earnings_events(symbols))
-        print("👔 扫描内部人买入...")
+        print("👔 Scanning insider buying...")
         all_events.extend(self.get_insider_buying_events(symbols))
 
         all_events.sort(key=lambda e: e.confidence, reverse=True)

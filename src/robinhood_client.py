@@ -1,5 +1,5 @@
 """
-Robinhood连接层 — 支持 robin_stocks 直连 + MCP Server 两种模式
+Robinhood connection layer — supports robin_stocks direct connection + MCP Server modes
 """
 import os
 import json
@@ -12,7 +12,7 @@ load_dotenv()
 
 
 class RobinhoodMCPClient:
-    """通过 Robinhood MCP Server 执行交易操作"""
+    """Execute trading operations via the Robinhood MCP Server"""
 
     def __init__(self, mcp_url: str = None):
         self.mcp_url = mcp_url or os.getenv("ROBINHOOD_MCP_URL", "https://agent.robinhood.com/mcp/trading")
@@ -20,7 +20,7 @@ class RobinhoodMCPClient:
         self.session.headers.update({"Content-Type": "application/json", "Accept": "application/json"})
 
     def _call_tool(self, tool_name: str, arguments: dict) -> dict:
-        """调用MCP工具（JSON-RPC 2.0协议）"""
+        """Invoke an MCP tool (JSON-RPC 2.0 protocol)"""
         payload = {
             "jsonrpc": "2.0",
             "id": 1,
@@ -35,7 +35,7 @@ class RobinhoodMCPClient:
         return result.get("result", {})
 
     def list_tools(self) -> list:
-        """列出MCP服务器所有可用工具"""
+        """List all tools available on the MCP server"""
         payload = {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
         resp = self.session.post(self.mcp_url, json=payload, timeout=10)
         resp.raise_for_status()
@@ -76,7 +76,7 @@ class RobinhoodMCPClient:
 
 
 class RobinhoodDirectClient:
-    """通过 robin_stocks 库直接连接Robinhood（MCP不可用时的备用）"""
+    """Connect directly to Robinhood via the robin_stocks library (fallback when MCP is unavailable)"""
 
     def __init__(self):
         self._logged_in = False
@@ -87,12 +87,12 @@ class RobinhoodDirectClient:
         mfa_key = os.getenv("ROBINHOOD_MFA_KEY")
 
         if not email or not password:
-            raise ValueError("请在.env文件中设置 ROBINHOOD_EMAIL 和 ROBINHOOD_PASSWORD")
+            raise ValueError("Please set ROBINHOOD_EMAIL and ROBINHOOD_PASSWORD in the .env file")
 
         mfa_code = pyotp.TOTP(mfa_key).now() if mfa_key else None
         r.login(email, password, mfa_code=mfa_code)
         self._logged_in = True
-        print("✅ Robinhood登录成功")
+        print("✅ Robinhood login successful")
 
     def _ensure_logged_in(self):
         if not self._logged_in:
@@ -120,7 +120,7 @@ class RobinhoodDirectClient:
             return r.order_buy_market(symbol, quantity)
         elif order_type == "limit" and limit_price:
             return r.order_buy_limit(symbol, quantity, limit_price)
-        raise ValueError(f"不支持的订单类型: {order_type}")
+        raise ValueError(f"Unsupported order type: {order_type}")
 
     def place_sell_order(self, symbol: str, quantity: float, order_type: str = "market", limit_price: float = None) -> dict:
         self._ensure_logged_in()
@@ -128,7 +128,7 @@ class RobinhoodDirectClient:
             return r.order_sell_market(symbol, quantity)
         elif order_type == "limit" and limit_price:
             return r.order_sell_limit(symbol, quantity, limit_price)
-        raise ValueError(f"不支持的订单类型: {order_type}")
+        raise ValueError(f"Unsupported order type: {order_type}")
 
     def place_stop_loss(self, symbol: str, quantity: float, stop_price: float) -> dict:
         self._ensure_logged_in()
@@ -149,18 +149,18 @@ class RobinhoodDirectClient:
 
 def get_client(prefer_mcp: bool = True):
     """
-    返回合适的客户端。
-    优先使用MCP Server；如果MCP不可达，自动降级到robin_stocks直连。
+    Return the appropriate client.
+    Prefer MCP Server; automatically fall back to robin_stocks direct connection if MCP is unreachable.
     """
     if prefer_mcp:
         mcp_url = os.getenv("ROBINHOOD_MCP_URL", "https://agent.robinhood.com/mcp/trading")
         client = RobinhoodMCPClient(mcp_url)
         try:
             tools = client.list_tools()
-            print(f"✅ MCP Server连接成功，可用工具: {[t['name'] for t in tools]}")
+            print(f"✅ MCP Server connected, available tools: {[t['name'] for t in tools]}")
             return client
         except Exception as e:
-            print(f"⚠️  MCP Server不可达 ({e})，降级到robin_stocks直连模式")
+            print(f"⚠️  MCP Server unreachable ({e}), falling back to robin_stocks direct mode")
 
     client = RobinhoodDirectClient()
     client.login()
