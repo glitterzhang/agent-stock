@@ -36,7 +36,7 @@ src/
 ```
 
 ## Robinhood MCP Server
-- URL: http://agent.robinhood.com/mcp/trading
+- URL: https://agent.robinhood.com/mcp/trading
 - 配置位置: .claude/settings.json
 - 协议: JSON-RPC 2.0 over HTTP/SSE
 - 备用: robin_stocks Python库（自动降级）

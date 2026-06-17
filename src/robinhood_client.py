@@ -15,7 +15,7 @@ class RobinhoodMCPClient:
     """通过 Robinhood MCP Server 执行交易操作"""
 
     def __init__(self, mcp_url: str = None):
-        self.mcp_url = mcp_url or os.getenv("ROBINHOOD_MCP_URL", "http://agent.robinhood.com/mcp/trading")
+        self.mcp_url = mcp_url or os.getenv("ROBINHOOD_MCP_URL", "https://agent.robinhood.com/mcp/trading")
         self.session = requests.Session()
         self.session.headers.update({"Content-Type": "application/json", "Accept": "application/json"})
 
@@ -153,7 +153,7 @@ def get_client(prefer_mcp: bool = True):
     优先使用MCP Server；如果MCP不可达，自动降级到robin_stocks直连。
     """
     if prefer_mcp:
-        mcp_url = os.getenv("ROBINHOOD_MCP_URL", "http://agent.robinhood.com/mcp/trading")
+        mcp_url = os.getenv("ROBINHOOD_MCP_URL", "https://agent.robinhood.com/mcp/trading")
         client = RobinhoodMCPClient(mcp_url)
         try:
             tools = client.list_tools()
