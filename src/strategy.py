@@ -174,18 +174,22 @@ class EventDrivenStrategy:
 
         candidates.sort(key=lambda x: x[0], reverse=True)
 
+        if candidates:
+            log.info(f"📋 候选股票排名（综合评分 = 技术×60% + 事件×40%，门槛>{MIN_COMBINED_SCORE}）:")
+            for score, sig, ev in candidates[:5]:
+                status = "✅ 可买入" if score >= MIN_COMBINED_SCORE else f"❌ 不足{MIN_COMBINED_SCORE}分"
+                log.info(f"   {sig.symbol}: 技术{sig.score:.0f} + 事件{ev.confidence*100:.0f} = 综合{score:.1f} {status}")
+        else:
+            log.info("⏳ 当前无符合条件的买入机会（需同时满足技术信号+催化剂事件），继续等待...")
+
         bought = 0
         for combined_score, signal, event in candidates:
             if bought >= slots_available:
                 break
             if combined_score < MIN_COMBINED_SCORE:
-                log.info(f"⏳ 最高综合评分 {combined_score:.1f} < {MIN_COMBINED_SCORE}，暂无合适买点，等待...")
                 break
             if self._evaluate_entry(signal, event, combined_score, portfolio_value):
                 bought += 1
-
-        if bought == 0 and not candidates:
-            log.info("⏳ 当前无符合条件的买入机会，继续等待...")
 
         log.info(self.risk_manager.summary())
 

@@ -131,12 +131,21 @@ class StockScreener:
 
             reasons = []
             score = 0
+            disqualifiers = []
+
+            # 负PE = 公司亏损，直接排除
+            if pe and pe < 0:
+                disqualifiers.append(f"亏损公司(PE={pe:.1f}x)")
+
+            if disqualifiers:
+                print(f"  ❌ {symbol} 排除: {', '.join(disqualifiers)}")
+                return None
 
             if rsi < self.rsi_threshold:
                 score += 25
                 reasons.append(f"RSI超卖 ({rsi:.1f})")
 
-            if pe and pe < self.max_pe:
+            if pe and 0 < pe < self.max_pe:
                 score += 20
                 reasons.append(f"低PE ({pe:.1f}x)")
             if pb and pb < self.max_pb:
