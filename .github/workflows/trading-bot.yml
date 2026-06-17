@@ -2,23 +2,14 @@ name: Trading Bot
 
 on:
   schedule:
-    # US market hours (EDT, UTC-4): open 9:30 AM = 13:30 UTC, close 4:00 PM = 20:00 UTC
-    - cron: '35 13 * * 1-5'   # ~9:35 AM EDT (just after open)
-    - cron: '0 14-19 * * 1-5' # hourly 10:00 AM - 3:00 PM EDT
-    - cron: '55 19 * * 1-5'   # ~3:55 PM EDT (just before close)
+    # Run every hour during US trading hours (UTC 13:00-20:00 = Beijing 21:00-04:00, Mon-Fri)
+    - cron: '0 13-20 * * 1-5'
   workflow_dispatch:
 
-permissions:
-  contents: read
-
-concurrency:
-  group: trading-bot
-  cancel-in-progress: true
-
 jobs:
-  scan:
+  scan-and-trade:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v4
@@ -32,7 +23,10 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      - name: Scan only (dry-run, no credentials)
+      - name: Scan & Trade
         env:
+          ROBINHOOD_EMAIL: ${{ secrets.ROBINHOOD_EMAIL }}
+          ROBINHOOD_PASSWORD: ${{ secrets.ROBINHOOD_PASSWORD }}
+          ROBINHOOD_MFA_KEY: ${{ secrets.ROBINHOOD_MFA_KEY }}
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
-        run: python main.py --scan-once --dry-run
+        run: python main.py --live --scan-once --yes
