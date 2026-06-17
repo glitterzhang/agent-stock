@@ -1,0 +1,35 @@
+name: Trading Bot
+
+on:
+  schedule:
+    # 每天北京时间 21:25（EST 9:25，美股开盘前）
+    - cron: '25 13 * * 1-5'   # UTC 13:25 = 北京 21:25，只在周一到周五运行
+  workflow_dispatch:            # 允许手动触发
+
+jobs:
+  scan-and-trade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: claude/amazing-ride-d2d7vs
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run trading scan
+        env:
+          ROBINHOOD_EMAIL: ${{ secrets.ROBINHOOD_EMAIL }}
+          ROBINHOOD_PASSWORD: ${{ secrets.ROBINHOOD_PASSWORD }}
+          ROBINHOOD_MFA_KEY: ${{ secrets.ROBINHOOD_MFA_KEY }}
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+        run: python main.py --live --scan-once
