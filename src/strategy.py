@@ -129,13 +129,53 @@ class EventDrivenStrategy:
         return False, ""
 
     def monitor_only(self):
-        """每小时只检查持仓，不做买入扫描"""
-        if not self.risk_manager.open_positions:
-            log.info("👀 持仓监控：当前无持仓，跳过")
+        """每小时从Robinhood拉取真实持仓，检查止损/止盈/趋势"""
+        log.info(f"👀 持仓监控 [{datetime.now().strftime('%Y-%m-%d %H:%M')}]")
+
+        # 直接从Robinhood读取真实持仓（不依赖内存状态）
+        positions = self._load_robinhood_positions()
+        if not positions:
+            log.info("   当前无持仓，跳过")
             return
-        log.info(f"👀 持仓监控 [{datetime.now().strftime('%H:%M')}]")
+
+        log.info(f"   从Robinhood读取到 {len(positions)} 个持仓")
+        for symbol, pos in positions.items():
+            self.risk_manager.open_positions[symbol] = pos
+
         self._monitor_positions()
-        log.info(self.risk_manager.summary())
+
+    def _load_robinhood_positions(self) -> dict:
+        """从Robinhood拉取当前持仓，转换为risk_manager格式"""
+        if self.dry_run:
+            return self.risk_manager.open_positions
+
+        try:
+            raw = r.get_open_stock_positions()
+            if not raw:
+                return {}
+
+            positions = {}
+            for pos in raw:
+                symbol = r.get_symbol_by_url(pos.get("instrument"))
+                if not symbol:
+                    continue
+                qty = float(pos.get("quantity", 0))
+                avg_price = float(pos.get("average_buy_price", 0))
+                if qty <= 0 or avg_price <= 0:
+                    continue
+
+                positions[symbol] = {
+                    "quantity": qty,
+                    "entry_price": avg_price,
+                    "stop_loss": round(avg_price * (1 - float(os.getenv("STOP_LOSS_PCT", 0.07))), 2),
+                    "take_profit": round(avg_price * (1 + float(os.getenv("TAKE_PROFIT_PCT", 0.20))), 2),
+                }
+                log.info(f"   {symbol}: {qty}股 @ ${avg_price:.2f} | 止损${positions[symbol]['stop_loss']:.2f} | 止盈${positions[symbol]['take_profit']:.2f}")
+
+            return positions
+        except Exception as e:
+            log.error(f"读取Robinhood持仓失败: {e}")
+            return {}
 
     def run_scan(self):
         log.info("=" * 60)
