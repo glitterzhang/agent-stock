@@ -31,6 +31,7 @@ def parse_args():
     parser.add_argument("--live", action="store_true", help="实盘模式")
     parser.add_argument("--dry-run", action="store_true", default=True, help="模拟模式（默认）")
     parser.add_argument("--scan-once", action="store_true", help="只扫描一次后退出（调试）")
+    parser.add_argument("--yes", action="store_true", help="跳过确认提示（CI/自动化使用）")
     parser.add_argument("--watchlist", nargs="+", help="自定义监控股票")
     return parser.parse_args()
 
@@ -44,7 +45,7 @@ def main():
     print(f"  模式: {'🟡 模拟交易' if dry_run else '🔴 实盘交易'}")
     print("=" * 60)
 
-    if not dry_run:
+    if not dry_run and not args.yes:
         print("\n⚠️  警告: 实盘模式已启用，将真实下单！")
         confirm = input("输入 YES 确认继续: ")
         if confirm.strip() != "YES":
