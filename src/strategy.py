@@ -181,8 +181,11 @@ class EventDrivenStrategy:
         log.info("=" * 60)
         log.info(f"🚀 开始扫描 [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]")
 
-        current_positions = len(self.risk_manager.open_positions)
-        log.info(f"📊 当前持仓: {current_positions}/{MAX_POSITIONS}")
+        # 每次启动先从Robinhood同步真实持仓
+        real_positions = self._load_robinhood_positions()
+        self.risk_manager.open_positions = real_positions
+
+        log.info(f"📊 当前持仓: {len(real_positions)}/{MAX_POSITIONS}")
 
         # 第一步：先检查现有持仓是否需要卖出
         if self.risk_manager.open_positions:
