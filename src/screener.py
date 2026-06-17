@@ -54,18 +54,28 @@ class StockScreener:
         """从 Robinhood 获取股票数据"""
         self._ensure_login()
 
-        # 历史价格（3个月日线）
-        hist_raw = r.get_stock_historicals(
+        # 用小时线计算RSI（更实时），日线计算成交量比率
+        hist_hour_raw = r.get_stock_historicals(
+            symbol, interval="hour", span="month", bounds="regular"
+        )
+        hist_day_raw = r.get_stock_historicals(
             symbol, interval="day", span="3month", bounds="regular"
         )
-        if not hist_raw:
+        if not hist_hour_raw or not hist_day_raw:
             return None, {}, None
 
-        hist = pd.DataFrame(hist_raw)
+        # 小时线用于RSI/MACD（过去1个月，约160根K线）
+        hist = pd.DataFrame(hist_hour_raw)
         hist["Close"] = hist["close_price"].astype(float)
         hist["Volume"] = hist["volume"].astype(float)
         hist["Date"] = pd.to_datetime(hist["begins_at"])
         hist = hist.set_index("Date").sort_index()
+
+        # 日线用于成交量比率（20日均量对比）
+        hist_day = pd.DataFrame(hist_day_raw)
+        hist_day["Volume"] = hist_day["volume"].astype(float)
+        hist_day["Date"] = pd.to_datetime(hist_day["begins_at"])
+        hist_day = hist_day.set_index("Date").sort_index()
 
         # 基本面数据
         fundamentals = r.get_fundamentals(symbol)
@@ -81,7 +91,7 @@ class StockScreener:
             "targetMeanPrice": _safe_float(quote.get("last_trade_price")),
         }
 
-        return None, info, hist
+        return None, info, hist, hist_day
 
     def calculate_rsi(self, closes: pd.Series, period: int = 14) -> float:
         delta = closes.diff()
@@ -100,15 +110,17 @@ class StockScreener:
 
     def screen(self, symbol: str) -> Optional[StockSignal]:
         try:
-            _, info, hist = self._fetch(symbol)
+            _, info, hist, hist_day = self._fetch(symbol)
             if hist is None or hist.empty or len(hist) < 20:
                 return None
 
             price = float(hist["Close"].iloc[-1])
+            # RSI用小时线（实时），MACD同样用小时线
             rsi = self.calculate_rsi(hist["Close"])
 
-            avg_vol = hist["Volume"].rolling(20).mean().iloc[-1]
-            today_vol = hist["Volume"].iloc[-1]
+            # 成交量比率用日线（今日量 vs 20日均量）
+            avg_vol = hist_day["Volume"].rolling(20).mean().iloc[-1]
+            today_vol = hist_day["Volume"].iloc[-1]
             volume_ratio = float(today_vol / avg_vol) if avg_vol > 0 else 0
 
             pe = info.get("trailingPE")
