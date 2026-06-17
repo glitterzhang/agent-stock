@@ -2,6 +2,7 @@
 Robinhood connection layer — supports robin_stocks direct connection + MCP Server modes
 """
 import os
+import base64
 import json
 import requests
 import pyotp
@@ -85,14 +86,32 @@ class RobinhoodDirectClient:
         email = os.getenv("ROBINHOOD_EMAIL")
         password = os.getenv("ROBINHOOD_PASSWORD")
         mfa_key = os.getenv("ROBINHOOD_MFA_KEY")
+        pickle_b64 = os.getenv("ROBINHOOD_PICKLE_B64")
 
         if not email or not password:
             raise ValueError("Please set ROBINHOOD_EMAIL and ROBINHOOD_PASSWORD in the .env file")
 
+        # Restore cached session token to avoid triggering new-device push notification
+        if pickle_b64:
+            import pickle
+            token_dir = os.path.expanduser("~/.tokens")
+            os.makedirs(token_dir, exist_ok=True)
+            pickle_path = os.path.join(token_dir, "robinhood.pickle")
+            with open(pickle_path, "wb") as f:
+                f.write(base64.b64decode(pickle_b64))
+            print("✅ Restored cached Robinhood session token")
+
         mfa_code = pyotp.TOTP(mfa_key).now() if mfa_key else None
-        r.login(email, password, mfa_code=mfa_code)
+        r.login(email, password, mfa_code=mfa_code, store_session=True)
         self._logged_in = True
         print("✅ Robinhood login successful")
+
+        # Print current pickle as base64 so you can save it to GitHub Secrets
+        pickle_path = os.path.expanduser("~/.tokens/robinhood.pickle")
+        if os.path.exists(pickle_path) and not pickle_b64:
+            with open(pickle_path, "rb") as f:
+                encoded = base64.b64encode(f.read()).decode()
+            print(f"\n📋 Save this to GitHub Secret ROBINHOOD_PICKLE_B64 to skip future device approvals:\n{encoded}\n")
 
     def _ensure_logged_in(self):
         if not self._logged_in:
