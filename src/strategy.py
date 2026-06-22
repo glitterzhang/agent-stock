@@ -245,6 +245,39 @@ class EventDrivenStrategy:
 
         log.info(self.risk_manager.summary())
 
+    def test_buy(self, amount_usd: float = 10.0):
+        """Scan stocks and place a single market buy order for the top-scored stock."""
+        log.info("=" * 60)
+        log.info(f"🧪 TEST BUY — scanning for best stock to buy ${amount_usd:.0f} worth")
+
+        signals = self.screener.scan_watchlist(self.watchlist)
+        if not signals:
+            log.info("❌ No stocks passed screening, cannot test buy")
+            return
+
+        # Pick the highest-scored stock regardless of event catalyst
+        best = signals[0]
+        current_price = self._get_current_price(best.symbol)
+        if current_price <= 0:
+            current_price = best.price
+
+        quantity = amount_usd / current_price
+        # Robinhood supports fractional shares; round to 6 decimal places
+        quantity = round(quantity, 6)
+
+        log.info(f"🎯 Best candidate: {best.symbol} | score {best.score:.0f} | price ~${current_price:.2f}")
+        log.info(f"   Buying {quantity} shares (${amount_usd:.0f} / ${current_price:.2f})")
+
+        if self.dry_run:
+            log.info(f"   [dry-run] Would place market buy: {best.symbol} x {quantity}")
+            return
+
+        try:
+            result = self.client.place_buy_order(best.symbol, quantity, "market")
+            log.info(f"   ✅ Order submitted: {result}")
+        except Exception as e:
+            log.error(f"   ❌ Order failed: {e}")
+
     def _evaluate_entry(self, signal: StockSignal, event: CatalystEvent,
                         combined_score: float, portfolio_value: float) -> bool:
         sym = signal.symbol

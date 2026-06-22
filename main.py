@@ -33,6 +33,7 @@ def parse_args():
     parser.add_argument("--scan-once", action="store_true", help="run one scan and exit (debugging)")
     parser.add_argument("--yes", action="store_true", help="skip confirmation prompt (for CI/automation)")
     parser.add_argument("--watchlist", nargs="+", help="custom stock watchlist")
+    parser.add_argument("--test-buy", type=float, metavar="USD", help="scan and place a single test buy for the given dollar amount (e.g. --test-buy 10)")
     return parser.parse_args()
 
 
@@ -54,6 +55,10 @@ def main():
             return
 
     strategy = EventDrivenStrategy(watchlist=args.watchlist, dry_run=dry_run)
+
+    if args.test_buy:
+        strategy.test_buy(amount_usd=args.test_buy)
+        return
 
     if args.scan_once:
         strategy.run_scan()
