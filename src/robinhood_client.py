@@ -136,17 +136,17 @@ class RobinhoodDirectClient:
     def place_buy_order(self, symbol: str, quantity: float, order_type: str = "market", limit_price: float = None) -> dict:
         self._ensure_logged_in()
         if order_type == "market":
-            return r.order_buy_market(symbol, quantity)
+            return r.order_buy_market(symbol, quantity, timeInForce="gfd")
         elif order_type == "limit" and limit_price:
-            return r.order_buy_limit(symbol, quantity, limit_price)
+            return r.order_buy_limit(symbol, quantity, limit_price, timeInForce="gfd")
         raise ValueError(f"Unsupported order type: {order_type}")
 
     def place_sell_order(self, symbol: str, quantity: float, order_type: str = "market", limit_price: float = None) -> dict:
         self._ensure_logged_in()
         if order_type == "market":
-            return r.order_sell_market(symbol, quantity)
+            return r.order_sell_market(symbol, quantity, timeInForce="gfd")
         elif order_type == "limit" and limit_price:
-            return r.order_sell_limit(symbol, quantity, limit_price)
+            return r.order_sell_limit(symbol, quantity, limit_price, timeInForce="gfd")
         raise ValueError(f"Unsupported order type: {order_type}")
 
     def place_stop_loss(self, symbol: str, quantity: float, stop_price: float) -> dict:
